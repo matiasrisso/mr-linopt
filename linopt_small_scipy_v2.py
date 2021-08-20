@@ -8,6 +8,13 @@ from streamlit.state.session_state import SessionState
 
 ########## To run the app type:     streamlit run linopt_small_scipy_v2.py
 
+if 'new_model' not in st.session_state: # Initiation of parameters
+    st.session_state.new_model = True
+    st.session_state.A_ub = []
+    st.session_state.b_ub = []
+    st.session_state.A_eq = []
+    st.session_state.b_eq = []
+    st.session_state.bounds = [(0, np.inf) for i in range(2)]
 
 
 # OBJECTIVE FUNCITON ##############################################################
@@ -51,13 +58,6 @@ st.latex(objective_type + ' Z = ' + OF_string)
 
 
 # RESTRICTIONS ##############################################################
-if 'new_model' not in st.session_state: # Initiation of parameters
-    st.session_state.new_model = True
-    st.session_state.A_ub = []
-    st.session_state.b_ub = []
-    st.session_state.A_eq = []
-    st.session_state.b_eq = []
-    st.session_state.bounds = [(0, np.inf) for i in range(num_variab)]
 
 st.header('Restrictions')
 edit_restrictions = st.radio('Add or delete restrictions', ['Yes', 'No'])
