@@ -8,7 +8,9 @@ from streamlit.state.session_state import SessionState
 
 ########## To run the app type:     streamlit run linopt_small_scipy_v2.py
 
-if 'new_model' not in st.session_state: # Initiation of parameters
+
+# Initiate parameters
+if 'new_model' not in st.session_state: 
     st.session_state.new_model = True
     st.session_state.A_ub = []
     st.session_state.b_ub = []
@@ -16,34 +18,48 @@ if 'new_model' not in st.session_state: # Initiation of parameters
     st.session_state.b_eq = []
     st.session_state.bounds = [(0, np.inf) for i in range(2)]
 
-
 # OBJECTIVE FUNCITON ##############################################################
 st.sidebar.subheader('Objective parameters')
 objective_type = st.sidebar.radio('',['Max','Min'], key='objective_type')
 
 # Variables
-num_variab = st.sidebar.slider('Number of variables', min_value=2, max_value=20, value=2, key='number_variables')
+st.session_state.num_variab = st.sidebar.slider('Number of variables', min_value=2, max_value=20, value=2, key='slider_number_variables')
 # Update the default bounds for the new number of variables
+# Update amount of coeficients in constraints
 prev_num_variab = len(st.session_state.bounds)
-if prev_num_variab >= num_variab:
-    st.session_state.bounds = st.session_state.bounds[0:num_variab]
-else:
-    for i in range(num_variab - prev_num_variab):
+if prev_num_variab > st.session_state.num_variab:
+    st.session_state.bounds = st.session_state.bounds[0:st.session_state.num_variab]
+    if len(st.session_state.A_ub) > 0:
+        st.session_state.A_ub = [i[0:st.session_state.num_variab] for i in st.session_state.A_ub]
+        st.session_state.b_ub = st.session_state.b_ub[0:st.session_state.num_variab]
+    if len(st.session_state.A_eq) > 0:
+        st.session_state.A_eq = [i[0:st.session_state.num_variab] for i in st.session_state.A_eq]
+        st.session_state.b_eq = st.session_state.b_eq[0:st.session_state.num_variab]
+elif prev_num_variab < st.session_state.num_variab:
+    for i in range(st.session_state.num_variab - prev_num_variab):
         st.session_state.bounds.append((0, np.inf))
+        if len(st.session_state.A_ub) > 0:
+            for constr in st.session_state.A_ub:
+                constr.append(0)
+            st.session_state.b_ub.append(0)
+        if len(st.session_state.A_eq) > 0:
+            for constr in st.session_state.A_eq:
+                constr.append(0)
+            st.session_state.b_eq.append(0)
 
 
-X_n = ['x_'+str(i+1) for i in range(num_variab)] # names
-C_of  = [1 for i in range(num_variab)]  # coefs for the objetive funciton
+X_n = ['x_'+str(i+1) for i in range(st.session_state.num_variab)] # names
+C_of  = [1 for i in range(st.session_state.num_variab)]  # coefs for the objetive funciton
 C_of_latex = C_of
 
-for i in range(num_variab):
+for i in range(st.session_state.num_variab):
     C_of[i] = st.sidebar.number_input('X'+str(i+1)+' Coef', value=1.0, key='obj_coef_'+str(i+1))
 if objective_type == 'Max':
     C_of = [-i for i in C_of] # reverse the coefs if it is a max objetive, solver only does min
 
 # Show objective function
 OF_string = ''
-for i in range(num_variab):
+for i in range(st.session_state.num_variab):
     if i == 0:
         OF_string += ( str(C_of_latex[i]) + ' * ' + X_n[i] )
     elif C_of_latex[i] >= 0:
@@ -57,35 +73,33 @@ st.latex(objective_type + ' Z = ' + OF_string)
 
 
 
-# RESTRICTIONS ##############################################################
+# Constraints ##############################################################
 
-st.header('Restrictions')
-edit_restrictions = st.radio('Add or delete restrictions', ['Yes', 'No'])
-
-if edit_restrictions == 'Yes':
-    # Add restriction
-    st.subheader('Add restrictions or bounds')
+st.header('Constraints')
+with st.beta_expander('Add or delete constraints', True):
+    # Add constraint
+    st.subheader('Add constraints or edit bounds')
     with st.beta_container():
         col1, col2 = st.beta_columns(2)
-        restriction_type = col1.radio('Type', ['X < U', 'L < X', 'X = B', 'Variable bounds'])
+        restriction_type = col1.radio('Type', ['<= Const', '>= Const', '== Const', 'Variable bounds'])
 
-        if restriction_type == 'X < U':
-            b_val = col2.number_input('Upper limit')
-        elif restriction_type == 'L < X':
-            b_val = - col2.number_input('Lower limit') # negative as it is an opposite upper bound
-        elif restriction_type == 'X = B':
-            b_val = col2.number_input('Equal value')
+        if restriction_type == '<= Const':
+            b_val = col2.number_input('Constraint value')
+        elif restriction_type == '>= Const':
+            b_val = - col2.number_input('Constraint value') # negative as it is an opposite upper bound
+        elif restriction_type == '== Const':
+            b_val = col2.number_input('Constraint value')
         
         if restriction_type != 'Variable bounds':
-            A_vect = [i for i in range(num_variab)]
-            for i in range(num_variab):
-                if restriction_type != 'L < X':
+            A_vect = [i for i in range(st.session_state.num_variab)]
+            for i in range(st.session_state.num_variab):
+                if restriction_type != '>= Const':
                     A_vect[i] = st.number_input('X'+str(i+1)+' Coef', value=1.0, key='res_coef_'+str(i+1))
                 else:
                     A_vect[i] = - st.number_input('X'+str(i+1)+' Coef', value=1.0, key='res_coef_'+str(i+1)) # negative as it is an opposite upper bound
         else:
-            Bound_list = [[0, np.inf] for i in range(num_variab)]
-            for i in range(num_variab):
+            Bound_list = [[0, np.inf] for i in range(st.session_state.num_variab)]
+            for i in range(st.session_state.num_variab):
                 bound_col1, bound_col2, bound_col3, bound_col4 = st.beta_columns(4) # has to be in the loop to make the columns every time
                 if bound_col1.radio('X'+str(i+1)+' min = -inf', ['Yes', 'No'], index=1) == 'Yes':
                     Bound_list[i][0] = -np.inf
@@ -98,18 +112,18 @@ if edit_restrictions == 'Yes':
 
         if st.button('Confirm'):
             # Add to the model
-            if restriction_type == 'X < U' or restriction_type == 'L < X':
+            if restriction_type == '<= Const' or restriction_type == '>= Const':
                 st.session_state.A_ub.append(A_vect)
                 st.session_state.b_ub.append(b_val)
-            elif restriction_type == 'X = B':
+            elif restriction_type == '== Const':
                 st.session_state.A_eq.append(A_vect)
                 st.session_state.b_eq.append(b_val)
             else:
-                Bound_tup = [tuple(Bound_list[i]) for i in range(num_variab)] # needs to be a list of tuples for the solver
+                Bound_tup = [tuple(Bound_list[i]) for i in range(st.session_state.num_variab)] # needs to be a list of tuples for the solver
                 st.session_state.bounds = Bound_tup
 
     
-    st.subheader('Delete restrictions')
+    st.subheader('Delete constraints')
     total_ineq = len(st.session_state.b_ub)
     total_eq = len(st.session_state.b_eq)
     total_restr = len(st.session_state.b_ub) + len(st.session_state.b_eq)
@@ -132,42 +146,42 @@ if edit_restrictions == 'Yes':
         st.session_state.b_eq = [st.session_state.b_eq[i] for i in range(total_eq) if st.session_state.cond_del[i+total_ineq]]
 
 
-# Show restrictions
-if st.checkbox('Show restrictions', value=True):
+# Show constraints
+with st.beta_expander('Show constraints', True):
     res_counter = 1 # to enumerate them when printed
 
     # Inequalities
     if len(st.session_state.A_ub) > 0:
-        for i, restr in enumerate(st.session_state.A_ub):
-            r_string = 'R_' + str(res_counter) + ': '
-            for j in range(num_variab):
-                if restr[j] != 0:
+        for i, constr in enumerate(st.session_state.A_ub):
+            c_string = 'C_' + str(res_counter) + ': '
+            for j in range(st.session_state.num_variab):
+                if constr[j] != 0:
                     if j == 0:
-                        r_string += ( str(restr[j]) + ' * ' + X_n[j] )
-                    elif restr[j] >= 0:
-                        r_string += ( ' + ' + str(abs(restr[j])) + ' * ' + X_n[j] )
+                        c_string += ( str(constr[j]) + ' * ' + X_n[j] )
+                    elif constr[j] >= 0:
+                        c_string += ( ' + ' + str(abs(constr[j])) + ' * ' + X_n[j] )
                     else:
-                        r_string += ( ' - ' + str(abs(restr[j])) + ' * ' + X_n[j] )
+                        c_string += ( ' - ' + str(abs(constr[j])) + ' * ' + X_n[j] )
 
-            r_string += ( ' \leq ' + (str(st.session_state.b_ub[i]) if st.session_state.b_ub[i] !=0 else '0.0') ) # not to get -0
-            st.latex(r_string)
+            c_string += ( ' \leq ' + (str(st.session_state.b_ub[i]) if st.session_state.b_ub[i] !=0 else '0.0') ) # not to get -0
+            st.latex(c_string)
             res_counter += 1
 
     # Equalities
     if len(st.session_state.A_eq) > 0:
-        for i, restr in enumerate(st.session_state.A_eq):
-            r_string = 'R_' + str(res_counter) + ': '
-            for j in range(num_variab):
-                if restr[j] != 0:
+        for i, constr in enumerate(st.session_state.A_eq):
+            c_string = 'C_' + str(res_counter) + ': '
+            for j in range(st.session_state.num_variab):
+                if constr[j] != 0:
                     if j == 0:
-                        r_string += ( str(restr[j]) + ' * ' + X_n[j] )
-                    elif restr[j] >= 0:
-                        r_string += ( ' + ' + str(abs(restr[j])) + ' * ' + X_n[j] )
+                        c_string += ( str(constr[j]) + ' * ' + X_n[j] )
+                    elif constr[j] >= 0:
+                        c_string += ( ' + ' + str(abs(constr[j])) + ' * ' + X_n[j] )
                     else:
-                        r_string += ( ' - ' + str(abs(restr[j])) + ' * ' + X_n[j] )
+                        c_string += ( ' - ' + str(abs(constr[j])) + ' * ' + X_n[j] )
 
-            r_string += ( ' = ' + str(st.session_state.b_eq[i]))
-            st.latex(r_string)
+            c_string += ( ' = ' + str(st.session_state.b_eq[i]))
+            st.latex(c_string)
             res_counter += 1
 
     # Bounds
@@ -178,14 +192,13 @@ if st.checkbox('Show restrictions', value=True):
             b_string = ( L_b + ' \leq ' + X_n[i] + ' \leq ' + U_b )
             st.latex(b_string)
     else:
-        for i in range(num_variab):
+        for i in range(st.session_state.num_variab):
             b_string = ( '0' + ' \leq ' + X_n[i] + ' \leq ' + ' \infty' )
             st.latex(b_string)
 
 
-
 # Plot 2D system ################################################################################################
-if num_variab == 2:
+if st.session_state.num_variab == 2 and st.checkbox('Plot model', value=True):
     fig = go.Figure()
     fig.add_vline(x=0)
     fig.add_hline(y=0)
@@ -215,7 +228,7 @@ if num_variab == 2:
         for A, b in zip(st.session_state.A_ub, st.session_state.b_ub):
             x = np.linspace(-50, 50, 1000)
             y = (b - A[0] * x) / A[1]
-            name = 'R' + str(res_counter)
+            name = 'C' + str(res_counter)
             fig.add_trace(go.Scatter(x=x, y=y, mode = 'lines', line_dash='dot',name=name))
             res_counter += 1
     # Equalities
@@ -223,7 +236,7 @@ if num_variab == 2:
         for A, b in zip(st.session_state.A_eq, st.session_state.b_eq):
             x = np.linspace(-50, 50, 1000)
             y = (b - A[0] * x) / A[1]
-            name = 'R' + str(res_counter)
+            name = 'C' + str(res_counter)
             fig.add_trace(go.Scatter(x=x, y=y, mode = 'lines', name=name))
             res_counter += 1
 
@@ -246,7 +259,6 @@ if st.button('Solve'):
 
     if st.session_state.result['success']:
         st.balloons()
-
 
 if 'result' in st.session_state:
     result = st.session_state.result
